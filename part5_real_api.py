@@ -10,9 +10,10 @@ Learn:
 - Using environment variables for API keys (optional)
 """
 
-import requests
+import requests, json, os
 from datetime import datetime
-
+from dotenv import load_dotenv
+load_dotenv()
 
 # City coordinates (latitude, longitude)
 CITIES = {
@@ -26,6 +27,14 @@ CITIES = {
     "london": (51.5074, -0.1278),
     "tokyo": (35.6762, 139.6503),
     "sydney": (-33.8688, 151.2093),
+    "paris": (48.8566, 2.3522),
+    "dubai": (25.2048, 55.2708),
+    "singapore": (1.3521, 103.8198),
+    "toronto": (43.6532, -79.3832),
+    "berlin": (52.5200, 13.4050),
+    "moscow": (55.7558, 37.6173),
+    "cape town": (-33.9249, 18.4241),
+    "rio de janeiro": (-22.9068, -43.1729),
 }
 
 # Popular cryptocurrencies
@@ -147,6 +156,37 @@ def display_crypto(coin_name):
     print(f"{'=' * 40}")
 
 
+def compare_cryptos():
+    """Compare prices of multiple cryptos entered by the user."""
+    print("\n=== Crypto Price Comparison ===")
+    print(f"Available: {', '.join(CRYPTO_IDS.keys())}")
+    
+    user_input = input("Enter coins to compare (comma-separated, e.g., bitcoin, ethereum, solana): ")
+    coin_list = [c.strip().lower() for c in user_input.split(",")]
+
+    # Table Header
+    print(f"\n{'=' * 65}")
+    print(f"{'Coin Name':<15}{'Price (USD)':>15}{'24h Change':>15}{'Market Cap':>18}")
+    print(f"{'-' * 65}")
+
+    for coin in coin_list:
+        data = get_crypto_price(coin)
+        
+        if data:
+            usd = data["quotes"]["USD"]
+            name = data["name"]
+            price = f"${usd['price']:,.2f}"
+            change = f"{usd['percent_change_24h']:+.2f}%"
+            mkt_cap = f"${usd['market_cap'] / 1_000_000_000:,.1f}B" # Display in Billions
+
+            # Print formatted row
+            print(f"{name:<15}{price:>15}{change:>15}{mkt_cap:>18}")
+        else:
+            print(f"{coin.title():<15} [!] Data Not Found")
+
+    print(f"{'=' * 65}")
+
+
 def get_top_cryptos(limit=5):
     """Fetch top cryptocurrencies by market cap."""
     url = "https://api.coinpaprika.com/v1/tickers"
@@ -184,6 +224,108 @@ def display_top_cryptos():
     print(f"{'=' * 55}")
 
 
+def create_post():
+    """Simulate creating a new post using a POST request."""
+    print("\n=== Create New Post (Simulation) ===")
+    
+    title = input("Enter post title: ")
+    body = input("Enter post content: ")
+    user_id = input("Enter your User ID: ")
+
+    url = "https://jsonplaceholder.typicode.com/posts"
+    
+    # The data we are sending to the server
+    payload = {
+        "title": title,
+        "body": body,
+        "userId": user_id
+    }
+
+    try:
+        # We use .post() and the 'json' parameter
+        response = requests.post(url, json=payload, timeout=10)
+        
+        # HTTP 201 means "Created"
+        if response.status_code == 201:
+            new_post = response.json()
+            print(f"\n✅ Success! Post created on the server.")
+            print(f"Server Assigned ID: {new_post['id']}")
+            print(f"Title: {new_post['title']}")
+        else:
+            print(f"Failed to create post. Status code: {response.status_code}")
+            
+    except requests.RequestException as e:
+        print(f"Error connecting to API: {e}")
+
+
+
+def save_to_file(data, filename="results.json"):
+    """Saves any dictionary data to a JSON file."""
+    try:
+        with open(filename, "w") as f:
+            # indent=4 makes the file human-readable (pretty-print)
+            json.dump(data, f, indent=4)
+        print(f"\n📂 Data successfully saved to {filename}!")
+    except Exception as e:
+        print(f"Error saving file: {e}")
+
+def get_and_save_weather():
+    """Fetch weather and save it immediately."""
+    city = input("Enter city to save weather for: ").strip().lower()
+    data = get_weather(city)
+    
+    if data:
+        # Add a timestamp to the data so we know when it was saved
+        data['saved_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        save_to_file(data, f"{city}_weather.json")
+
+
+
+def get_openweathermap(city_name):
+    """Fetch current weather using OpenWeatherMap (Requires API Key)."""
+    
+    # 1. Retrieve the secret key from environment variables
+    api_key = os.environ.get("OPENWEATHER_API_KEY")
+    
+    if not api_key:
+        print("\n[!] Error: API Key not found!")
+        print("Please set the 'OPENWEATHER_API_KEY' environment variable.")
+        return None
+
+    # 2. Build the request
+    url = "https://api.openweathermap.org/data/2.5/weather"
+    params = {
+        "q": city_name,
+        "appid": api_key,
+        "units": "metric"  # Converts temperature to Celsius
+    }
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        
+        # If the key is invalid or city doesn't exist, this raises an error
+        response.raise_for_status() 
+        
+        data = response.json()
+        
+        # 3. Format and display the results
+        print(f"\n{'=' * 40}")
+        print(f"   OpenWeatherMap: {data['name']}, {data['sys']['country']}")
+        print(f"{'=' * 40}")
+        print(f"   Temperature: {data['main']['temp']}°C")
+        print(f"   Humidity:    {data['main']['humidity']}%")
+        print(f"   Description: {data['weather'][0]['description'].capitalize()}")
+        print(f"{'=' * 40}")
+        
+        return data
+
+    except requests.exceptions.HTTPError:
+        print(f"\n[!] City '{city_name}' not found or API Key is invalid.")
+    except Exception as e:
+        print(f"\n[!] Connection Error: {e}")
+    return None
+
+
 def dashboard():
     """Interactive dashboard combining weather and crypto."""
     print("\n" + "=" * 50)
@@ -197,7 +339,11 @@ def dashboard():
         print("  2. Check Crypto Price")
         print("  3. View Top 5 Cryptos")
         print("  4. Quick Dashboard (Delhi + Bitcoin)")
-        print("  5. Exit")
+        print("  5. Compare Multiple Cryptos")
+        print("  6. Create a New Post")
+        print("  7. Save file")
+        print("  8. Advanced Weather (OpenWeatherMap)")
+        print("  9. Exit")
 
         choice = input("\nSelect (1-5): ").strip()
 
@@ -219,6 +365,21 @@ def dashboard():
             display_crypto("bitcoin")
 
         elif choice == "5":
+            compare_cryptos() 
+
+        elif choice == "6": 
+            create_post()
+        
+        elif choice == "7":
+            city = input("Enter city to save weather for: ")
+            data = get_weather(city) # 1. Fetch the data first
+            if data:
+                save_to_file(data)   # 2. Pass that data into the function           
+
+        elif choice == "8": 
+            get_openweathermap(input("Enter city: "))
+
+        elif choice == "9":
             print("\nGoodbye! Happy coding!")
             break
 
